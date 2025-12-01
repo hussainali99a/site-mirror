@@ -1,41 +1,69 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import courseImage from "@/assets/course-1.jpg";
 
-const courses = [
-  {
-    id: 1,
-    title: "BOTH GROUP Sure Success Combo",
-    category: "CA Final",
-    discount: "Extra ₹ 3000 Off",
-    originalPrice: "₹ 45,000",
-    discountedPrice: "₹ 38,000",
-    image: courseImage,
-  },
-  {
-    id: 2,
-    title: "GROUP 1 Complete Course",
-    category: "CA Final",
-    discount: "Extra ₹ 2000 Off",
-    originalPrice: "₹ 28,000",
-    discountedPrice: "₹ 23,000",
-    image: courseImage,
-  },
-  {
-    id: 3,
-    title: "GROUP 2 Complete Course",
-    category: "CA Inter",
-    discount: "Extra ₹ 2000 Off",
-    originalPrice: "₹ 25,000",
-    discountedPrice: "₹ 20,000",
-    image: courseImage,
-  },
-];
+interface Course {
+  id: string;
+  title: string;
+  description: string | null;
+  price: number;
+  original_price: number | null;
+  duration: string | null;
+  level: string | null;
+  image_url: string | null;
+  features: string[] | null;
+  is_featured: boolean | null;
+}
 
 const CoursesSection = () => {
   const [activeFilter, setActiveFilter] = useState("All");
-  const filters = ["All", "CA Final", "CMA Final", "CA Inter"];
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchCourses();
+  }, []);
+
+  const fetchCourses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setCourses(data || []);
+    } catch (error: any) {
+      toast({
+        title: "Error loading courses",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const calculateDiscount = (price: number, originalPrice: number | null) => {
+    if (!originalPrice) return null;
+    return Math.round(((originalPrice - price) / originalPrice) * 100);
+  };
+
+  const filters = ["All", "Foundation", "Intermediate", "Final"];
+
+  if (loading) {
+    return (
+      <section className="py-20 bg-muted/30">
+        <div className="container mx-auto px-4 text-center">
+          <p className="text-muted-foreground">Loading courses...</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="py-20 bg-muted/30">
@@ -61,34 +89,48 @@ const CoursesSection = () => {
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {courses.map((course) => (
-            <Card
-              key={course.id}
-              className="overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-2"
-            >
-              <div className="relative">
-                <img
-                  src={course.image}
-                  alt={course.title}
-                  className="w-full h-64 object-cover"
-                />
-                <div className="absolute top-4 left-4 bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-semibold">
-                  {course.discount}
-                </div>
-              </div>
-              <CardContent className="p-6 space-y-4">
-                <div className="text-sm text-primary font-semibold">{course.category}</div>
-                <h3 className="text-xl font-bold text-foreground">{course.title}</h3>
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl font-bold text-primary">{course.discountedPrice}</span>
-                  <span className="text-lg text-muted-foreground line-through">{course.originalPrice}</span>
-                </div>
-                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
-                  Enroll Now
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+          {courses
+            .filter(course => activeFilter === "All" || course.level === activeFilter)
+            .map((course) => {
+              const discount = calculateDiscount(course.price, course.original_price);
+              return (
+                <Card
+                  key={course.id}
+                  className="overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-2"
+                >
+                  <div className="relative">
+                    <img
+                      src={course.image_url || courseImage}
+                      alt={course.title}
+                      className="w-full h-64 object-cover"
+                    />
+                    {discount && (
+                      <div className="absolute top-4 left-4 bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-semibold">
+                        {discount}% OFF
+                      </div>
+                    )}
+                  </div>
+                  <CardContent className="p-6 space-y-4">
+                    <div className="text-sm text-primary font-semibold">{course.level}</div>
+                    <h3 className="text-xl font-bold text-foreground">{course.title}</h3>
+                    {course.description && (
+                      <p className="text-sm text-muted-foreground line-clamp-2">{course.description}</p>
+                    )}
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl font-bold text-primary">₹{course.price.toLocaleString()}</span>
+                      {course.original_price && (
+                        <span className="text-lg text-muted-foreground line-through">
+                          ₹{course.original_price.toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                    <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
+                      Enroll Now
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
         </div>
       </div>
     </section>
